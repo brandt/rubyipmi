@@ -14,12 +14,16 @@ module Rubyipmi
 
       attr_accessor :options, :debug
 
-
-      def initialize(user, pass, host, opts)
+      def initialize(user=nil, pass=nil, host=nil, opts={})
         @debug = opts[:debug]
         @options = Rubyipmi::ObservableHash.new
-        raise("Must provide a host to connect to") unless host
-        @options["H"] = host
+        if Rubyipmi.validate_host(host)
+          unless host.nil?
+            @options["H"] = host
+          else
+            opts[:driver] = 'open'
+          end
+        end
         # Credentials can also be stored in the freeipmi configuration file
         # So they are not required
         @options["U"] = user if user
@@ -73,7 +77,6 @@ module Rubyipmi
           data['bmc_info'] = @bmc.info
         end
       end
-
     end
   end
 end

@@ -28,10 +28,56 @@ module Rubyipmi
     ['auto', "lan15", "lan20", "open"]
   end
 
+  def self.openipmi_available?
+    value = File.exists?('/dev/ipmi0') || File.exists?('/dev/ipmi/0') || File.exists?('/dev/ipmidev/0')
+  end
+
+  # returns boolean true if privilege type is valid
+  def self.supported_privilege_type?(type)
+    PRIV_TYPES.include?(type)
+  end
+
+  # validate the privilege unless nil is specified
+  def self.validate_privilege(privilege_type)
+    if ! privilege_type.nil?
+      privilege_type = privilege_type.upcase
+      unless supported_privilege_type?(privilege_type)
+        raise "Invalid privilege type :#{privilege_type}, must be one of: #{PRIV_TYPES.join("\n")}"
+      end
+    end
+    true
+  end
+
+  #validate existence of host or validate openipmi is installed when nil
+  def self.validate_host(host)
+    if host.nil?
+      raise 'No host was provided and openipmi is unavailable on this machine' unless openipmi_available?
+    end
+    true
+  end
+
+  def self.get_provider(provider)
+    # use the first available provider
+    case provider
+      when 'any'
+        if is_provider_installed?("freeipmi")
+          provider = "freeipmi"
+        elsif is_provider_installed?("ipmitool")
+          provider = "ipmitool"
+        else
+          raise "No IPMI provider is installed, please install freeipmi or ipmitool"
+        end
+      when 'freeipmi','ipmitool'
+        raise "The IPMI provider: #{provider} is not installed" unless is_provider_installed?(provider)
+        provider
+      else
+        raise "Incorrect provider given, must use freeipmi or ipmitool"
+    end
+  end
+
   # The connect method will create a connection object based the provider type passed in
   # If provider is left blank the function will use the first available provider
-
-  def self.connect(user, pass, host, provider='any', opts={:driver => 'auto',
+  def self.connect(user=nil, pass=nil, host=nil, provider='any', opts={:driver => 'auto', :privilege  =>nil,
                                                            :timeout => 'default', :debug => false})
 
     # use this variable to reduce cmd calls
@@ -47,24 +93,7 @@ module Rubyipmi
     opts[:timeout] ||= 'default'
     opts[:debug]   = false if opts[:debug] != true
 
-    if ! opts[:privilege].nil?
-      if ! supported_privilege_type?(opts[:privilege])
-        raise "Invalid privilege type :#{opts[:privilege]}, must be one of: #{PRIV_TYPES.join("\n")}"
-      end
-    end
-
-    # use the first available provider
-    if provider == 'any'
-      if is_provider_installed?("freeipmi")
-        provider = "freeipmi"
-        installed = true
-      elsif is_provider_installed?("ipmitool")
-        provider = "ipmitool"
-        installed = true
-      else
-        raise "No IPMI provider is installed, please install freeipmi or ipmitool"
-      end
-    end
+    validate_privilege(opts[:privilege])
 
     # Support multiple drivers
     # Note: these are just generic names of drivers that need to be specified for each provider
@@ -72,25 +101,17 @@ module Rubyipmi
       raise "You must specify a valid driver: #{valid_drivers.join(',')}"
     end
 
+    # validate and get first installed provider
+    provider = get_provider(provider)
+
     # If the provider is available create a connection object
-    if installed or is_provider_installed?(provider)
-      if provider == "freeipmi"
-        @conn = Rubyipmi::Freeipmi::Connection.new(user, pass, host, opts)
-      elsif provider == "ipmitool"
-        @conn = Rubyipmi::Ipmitool::Connection.new(user,pass,host, opts)
-      else
-        raise "Incorrect provider given, must use freeipmi or ipmitool"
-      end
+    if provider == "freeipmi"
+      @conn = Rubyipmi::Freeipmi::Connection.new(user, pass, host, opts)
+    elsif provider == "ipmitool"
+      @conn = Rubyipmi::Ipmitool::Connection.new(user,pass,host, opts)
     else
-      # Can't find the provider command line tool, maybe try other provider?
-      raise "The IPMI provider: #{provider} is not installed"
-
+      raise "Incorrect provider given, must use freeipmi or ipmitool"
     end
-  end
-
-  # returns boolean true if privilege type is valid
-  def self.supported_privilege_type?(type)
-     PRIV_TYPES.include?(type)
   end
 
   def self.connection
@@ -111,6 +132,7 @@ module Rubyipmi
   def self.is_provider_installed?(provider)
     case provider
       when "freeipmi"
+        # since freeipmi is a suite of commands we can't just check for freeipmi command so we use ipmipower instead
         cmdpath = locate_command('ipmipower')
       when "ipmitool"
         cmdpath = locate_command('ipmitool')

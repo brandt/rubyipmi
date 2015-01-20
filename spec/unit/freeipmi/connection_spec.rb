@@ -51,26 +51,27 @@ describe "Bmc" do
   end
 
   it 'object should have debug set to true' do
-    @conn.debug.should be_true
+    expect(@conn.debug).to eq(true)
   end
 
   it 'object should have driver set to auto if not specified' do
-    @conn.options.has_key?('driver-type').should be_false
+    expect(@conn.options.has_key?('driver-type')).to eq(false)
   end
 
   it 'object should have driver set to auto if not specified' do
     @conn = Rubyipmi.connect(@user, @pass, @host, @provider,{:debug => true, :driver => 'auto'})
-    @conn.options.has_key?('driver-type').should be_false
+    expect(@conn.options.has_key?('driver-type')).to eq(false)
+
   end
 
   it 'object should have priv type set to ADMINISTRATOR if not specified' do
     @conn = Rubyipmi.connect(@user, @pass, @host, @provider,{:debug => true, :driver => 'auto'})
-    @conn.options.has_key?('privilege-level').should be_false
+    expect(@conn.options.has_key?('privilege-level')).to eq(false)
   end
 
   it 'object should have priv type set to USER ' do
     @conn = Rubyipmi.connect(@user, @pass, @host, @provider,{:privilege => 'USER', :debug => true, :driver => 'auto'})
-    @conn.options.fetch('privilege-level').should eq('USER')
+    expect(@conn.options.fetch('privilege-level')).to eq('USER')
   end
 
   it 'should raise exception if invalid privilege type' do
@@ -96,4 +97,19 @@ describe "Bmc" do
     @conn.options['driver-type'].should eq('OPENIPMI')
   end
 
+  describe 'use openipmi' do
+
+    it 'should raise error when openipmi is not found' do
+      allow(File).to receive(:exists?).with('/dev/ipmi0').and_return(false)
+      allow(File).to receive(:exists?).with('/dev/ipmi/0').and_return(false)
+      allow(File).to receive(:exists?).with('/dev/ipmidev/0').and_return(false)
+      expect{Rubyipmi::Freeipmi::Connection.new}.to raise_error(RuntimeError)
+    end
+
+    it 'should create an object using defaults' do
+      allow(File).to receive(:exists?).with('/dev/ipmi0').and_return(true)
+      expect(Rubyipmi::Freeipmi::Connection.new.class).to eq(Rubyipmi::Freeipmi::Connection)
+      expect(Rubyipmi::Freeipmi::Connection.new.options).to eq({"driver-type"=>"OPENIPMI"})
+    end
+  end
 end
